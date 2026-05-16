@@ -589,8 +589,12 @@ function setSyncStatus(status, label) {
 async function fetchGist() {
   setSyncStatus('syncing', 'loading…');
   try {
-    const res = await fetch(`https://api.github.com/gists/${CFG.gistId}`, {
-      headers: { Authorization: `token ${CFG.token}` }
+    const res = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
+      headers: {
+        Authorization: `token ${CFG.token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
     });
     if (!res.ok) throw new Error('fetch failed');
     const data = await res.json();
@@ -614,8 +618,12 @@ async function pushGist() {
   try {
     const content = JSON.stringify(state, null, 2);
     // First get the filename
-    const infoRes = await fetch(`https://api.github.com/gists/${CFG.gistId}`, {
-      headers: { Authorization: `token ${CFG.token}` }
+    const infoRes = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
+      headers: {
+        Authorization: `token ${CFG.token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
     });
     const info = await infoRes.json();
     const filename = Object.keys(info.files)[0];
