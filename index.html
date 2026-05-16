@@ -641,25 +641,23 @@ function loadLinks() {
 // ─── TODOIST API ─────────────────────────────────────────
 const TODOIST_BASE = 'https://api.todoist.com/rest/v2';
 
-function todoistHeaders() {
-  return {
-    'Authorization': `Bearer ${CFG.todoistToken}`,
-    'Content-Type': 'application/json'
-  };
+function todoistAuthHeader() {
+  return { 'Authorization': `Bearer ${CFG.todoistToken}` };
 }
 
 async function fetchTasks() {
   setSyncStatus('syncing', 'loading…');
   try {
-    const res = await fetch(`${TODOIST_BASE}/tasks?filter=%23Inbox`, {
-      headers: todoistHeaders()
+    const res = await fetch(`${TODOIST_BASE}/tasks`, {
+      headers: todoistAuthHeader()
     });
-    if (!res.ok) throw new Error('fetch failed');
+    if (!res.ok) throw new Error(`${res.status}`);
     const tasks = await res.json();
     state.tasks = tasks.map(t => ({ id: t.id, text: t.content, done: false }));
     setSyncStatus('ok', 'synced');
   } catch(e) {
-    setSyncStatus('err', 'load err');
+    setSyncStatus('err', `err ${e.message}`);
+    console.error('Todoist fetchTasks:', e);
     state.tasks = [];
   }
   render();
@@ -670,15 +668,16 @@ async function apiAddTask(text) {
   try {
     const res = await fetch(`${TODOIST_BASE}/tasks`, {
       method: 'POST',
-      headers: todoistHeaders(),
+      headers: { ...todoistAuthHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: text })
     });
-    if (!res.ok) throw new Error('add failed');
+    if (!res.ok) throw new Error(`${res.status}`);
     const task = await res.json();
     setSyncStatus('ok', 'saved ✓');
     return task.id;
   } catch(e) {
-    setSyncStatus('err', 'save err');
+    setSyncStatus('err', `save err ${e.message}`);
+    console.error('Todoist apiAddTask:', e);
     return null;
   }
 }
@@ -687,27 +686,27 @@ async function apiCloseTask(id) {
   try {
     await fetch(`${TODOIST_BASE}/tasks/${id}/close`, {
       method: 'POST',
-      headers: todoistHeaders()
+      headers: todoistAuthHeader()
     });
-  } catch(e) { setSyncStatus('err', 'sync err'); }
+  } catch(e) { setSyncStatus('err', 'sync err'); console.error('apiCloseTask:', e); }
 }
 
 async function apiReopenTask(id) {
   try {
     await fetch(`${TODOIST_BASE}/tasks/${id}/reopen`, {
       method: 'POST',
-      headers: todoistHeaders()
+      headers: todoistAuthHeader()
     });
-  } catch(e) { setSyncStatus('err', 'sync err'); }
+  } catch(e) { setSyncStatus('err', 'sync err'); console.error('apiReopenTask:', e); }
 }
 
 async function apiDeleteTask(id) {
   try {
     await fetch(`${TODOIST_BASE}/tasks/${id}`, {
       method: 'DELETE',
-      headers: todoistHeaders()
+      headers: todoistAuthHeader()
     });
-  } catch(e) { setSyncStatus('err', 'sync err'); }
+  } catch(e) { setSyncStatus('err', 'sync err'); console.error('apiDeleteTask:', e); }
 }
 
 // ─── GIF ─────────────────────────────────────────────────
