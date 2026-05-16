@@ -591,9 +591,7 @@ async function fetchGist() {
   try {
     const res = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
       headers: {
-        Authorization: `token ${CFG.token}`,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        Authorization: `token ${CFG.token}`
       }
     });
     if (!res.ok) throw new Error('fetch failed');
@@ -620,9 +618,7 @@ async function pushGist() {
     // First get the filename
     const infoRes = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
       headers: {
-        Authorization: `token ${CFG.token}`,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        Authorization: `token ${CFG.token}`
       }
     });
     const info = await infoRes.json();
