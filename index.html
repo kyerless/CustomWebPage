@@ -10,6 +10,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
+    --font-size: 13px;
     --panel: rgba(30, 30, 30, 0.82);
     --panel-border: rgba(255,255,255,0.09);
     --panel-header: rgba(20,20,20,0.6);
@@ -48,13 +49,20 @@
   #app {
     position: relative; z-index: 1;
     width: 100%; height: 100vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr;
-    gap: 20px;
-    padding: 24px;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 20px 20px;
   }
+  #panels {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+    overflow: hidden;
+  }
+  #todo-panel { flex: 1; }
+  #shortcuts-panel { flex: 0 0 auto; max-height: 38vh; }
 
   /* ─── PANELS ─── */
   .panel {
@@ -65,7 +73,6 @@
     -webkit-backdrop-filter: blur(18px) saturate(1.4);
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 48px);
     overflow: hidden;
   }
 
@@ -193,7 +200,7 @@
 
   .todo-text {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--font-size);
     color: var(--text);
     line-height: 1.4;
     word-break: break-word;
@@ -242,10 +249,42 @@
     transition: all 0.15s;
   }
   .link-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-  .link-btn.sm { padding: 6px 12px; font-size: 11px; }
-  .link-btn.md { padding: 8px 16px; font-size: 13px; }
-  .link-btn.lg { padding: 11px 22px; font-size: 15px; }
+  .link-btn.sm { padding: 6px 12px; font-size: calc(var(--font-size) - 2px); }
+  .link-btn.md { padding: 8px 16px; font-size: var(--font-size); }
+  .link-btn.lg { padding: 11px 22px; font-size: calc(var(--font-size) + 2px); }
 
+  #topbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .size-lbl {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: 'DM Mono', monospace;
+      margin-right: 2px;
+  }
+  .size-btn {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--panel-border);
+      background: rgba(30,30,30,0.75);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+      transition: all 0.15s;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0;
+  }
+  .size-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .size-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+ 
   .link-del-x {
     position: absolute;
     top: -7px; right: -7px;
@@ -479,8 +518,17 @@
 <!-- MAIN APP -->
 <div id="app">
 
+  <div id="topbar">
+    <span class="size-lbl">Text Size</span>
+    <button class="size-btn" onclick="setSize('sm')" style="font-size:11px">A</button>
+    <button class="size-btn" onclick="setSize('md')" style="font-size:14px">A</button>
+    <button class="size-btn" onclick="setSize('lg')" style="font-size:17px">A</button>
+  </div>
+
+  <div id="panels">
+
   <!-- TODO PANEL -->
-  <div class="panel">
+  <div class="panel" id="todo-panel">
     <div class="panel-header">
       <span class="panel-title">To-Do</span>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -511,6 +559,7 @@
     </div>
   </div>
 
+  </div>
 </div>
 
 <!-- LINK MODAL -->
@@ -793,6 +842,20 @@ if (loadConfig()) {
   document.getElementById('setup-screen').classList.add('hidden');
   init();
 }
+
+const SIZES = { sm: '12px', md: '15px', lg: '19px' };
+
+function setSize(s) {
+  document.documentElement.style.setProperty('--font-size', SIZES[s]);
+  document.querySelectorAll('.size-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['sm','md','lg'][i] === s);
+  });
+  localStorage.setItem('dashboard_fontsize', s);
+}
+
+const savedSize = localStorage.getItem('dashboard_fontsize') || 'md';
+setSize(savedSize);
+ 
 </script>
 </body>
 </html>
