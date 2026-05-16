@@ -838,7 +838,18 @@ async function init() {
   await fetchGist();
 }
 
-if (loadConfig()) {
+function loadFromURL() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('token') && p.get('gist')) {
+    CFG.token  = p.get('token');
+    CFG.gistId = p.get('gist');
+    CFG.gifs   = (p.get('gifs') || '').split('|').filter(Boolean);
+    return true;
+  }
+  return false;
+}
+
+if (loadFromURL() || loadConfig()) {
   document.getElementById('setup-screen').classList.add('hidden');
   init();
 }
