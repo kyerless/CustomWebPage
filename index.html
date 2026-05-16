@@ -491,16 +491,12 @@
 <div id="setup-screen">
   <div class="setup-card">
     <h2>Dashboard Setup</h2>
-    <p>Enter your GitHub Gist credentials to enable sync across all your devices.
-       <a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" target="_blank">Create a PAT here</a> (enable the <strong>gist</strong> scope).
+    <p>Enter your Todoist API token to sync your tasks with your Todoist Inbox.
+       <a href="https://app.todoist.com/app/settings/integrations/developer" target="_blank">Get your token here</a> under Integrations → Developer.
     </p>
     <div class="setup-field">
-      <label>GitHub Personal Access Token</label>
-      <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx" />
-    </div>
-    <div class="setup-field">
-      <label>Gist ID</label>
-      <input id="cfg-gist" type="text" placeholder="a1b2c3d4e5f6..." />
+      <label>Todoist API Token</label>
+      <input id="cfg-todoist" type="password" placeholder="your todoist api token…" />
     </div>
     <p>Paste your 5 GIF URLs below:</p>
     <div class="setup-gifs">
@@ -511,7 +507,7 @@
       <div class="gif-row"><input class="gif-input" type="text" placeholder="GIF URL 5" /></div>
     </div>
     <button class="setup-save" onclick="saveConfig()">Save & Launch</button>
-    <div class="setup-note">Config is stored in localStorage on this device only. Your PAT is never sent anywhere except the GitHub API.</div>
+    <div class="setup-note">Config is stored in localStorage on this device only. Your token is never sent anywhere except the Todoist API. Shortcuts are also local-only.</div>
   </div>
 </div>
 
@@ -594,20 +590,19 @@
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-let CFG = { token: '', gistId: '', gifs: [] };
+let CFG = { todoistToken: '', gifs: [] };
 
 function loadConfig() {
   const raw = localStorage.getItem('dashboard_cfg');
   if (raw) CFG = JSON.parse(raw);
-  return !!(CFG.token && CFG.gistId && CFG.gifs.length);
+  return !!(CFG.todoistToken && CFG.gifs.length);
 }
 
 function saveConfig() {
-  CFG.token  = document.getElementById('cfg-token').value.trim();
-  CFG.gistId = document.getElementById('cfg-gist').value.trim();
-  CFG.gifs   = [...document.querySelectorAll('.gif-input')]
+  CFG.todoistToken = document.getElementById('cfg-todoist').value.trim();
+  CFG.gifs = [...document.querySelectorAll('.gif-input')]
     .map(i => i.value.trim()).filter(Boolean);
-  if (!CFG.token || !CFG.gistId) return alert('Please enter your Token and Gist ID.');
+  if (!CFG.todoistToken) return alert('Please enter your Todoist API token.');
   if (CFG.gifs.length === 0) return alert('Please enter at least one GIF URL.');
   localStorage.setItem('dashboard_cfg', JSON.stringify(CFG));
   document.getElementById('setup-screen').classList.add('hidden');
@@ -615,8 +610,7 @@ function saveConfig() {
 }
 
 function openSetup() {
-  document.getElementById('cfg-token').value = CFG.token || '';
-  document.getElementById('cfg-gist').value  = CFG.gistId || '';
+  document.getElementById('cfg-todoist').value = CFG.todoistToken || '';
   const inputs = document.querySelectorAll('.gif-input');
   CFG.gifs.forEach((g,i) => { if (inputs[i]) inputs[i].value = g; });
   document.getElementById('setup-screen').classList.remove('hidden');
@@ -624,9 +618,8 @@ function openSetup() {
 
 // ─── STATE ────────────────────────────────────────────────
 let state = { tasks: [], links: [] };
-let saveTimer = null;
 
-// ─── GIST API ────────────────────────────────────────────
+ // ─── SYNC STATUS ─────────────────────────────────────────
 function setSyncStatus(status, label) {
   const dot = document.getElementById('sync-dot');
   const lbl = document.getElementById('sync-label');
@@ -635,61 +628,86 @@ function setSyncStatus(status, label) {
   lbl.textContent = label;
 }
 
-async function fetchGist() {
+// ─── LINKS PERSISTENCE ───────────────────────────────────
+function saveLinks() {
+  localStorage.setItem('dashboard_links', JSON.stringify(state.links));
+}
+
+function loadLinks() {
+  const raw = localStorage.getItem('dashboard_links');
+  state.links = raw ? JSON.parse(raw) : [];
+}
+
+// ─── TODOIST API ─────────────────────────────────────────
+const TODOIST_BASE = 'https://api.todoist.com/rest/v2';
+
+function todoistHeaders() {
+  return {
+    'Authorization': `Bearer ${CFG.todoistToken}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function fetchTasks() {
   setSyncStatus('syncing', 'loading…');
   try {
-    const res = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
-      headers: {
-        Authorization: `token ${CFG.token}`
-      }
+    const res = await fetch(`${TODOIST_BASE}/tasks?filter=%23Inbox`, {
+      headers: todoistHeaders()
     });
     if (!res.ok) throw new Error('fetch failed');
-    const data = await res.json();
-    const files = data.files;
-    const filename = Object.keys(files)[0];
-    const content = files[filename].content;
-    state = JSON.parse(content);
-    if (!Array.isArray(state.tasks)) state.tasks = [];
-    if (!Array.isArray(state.links)) state.links = [];
+    const tasks = await res.json();
+    state.tasks = tasks.map(t => ({ id: t.id, text: t.content, done: false }));
     setSyncStatus('ok', 'synced');
   } catch(e) {
     setSyncStatus('err', 'load err');
-    // Use empty state if first time or error
-    if (!state.tasks) state = { tasks: [], links: [] };
+    state.tasks = [];
   }
   render();
 }
 
-async function pushGist() {
+async function apiAddTask(text) {
   setSyncStatus('syncing', 'saving…');
   try {
-    const content = JSON.stringify(state, null, 2);
-    // First get the filename
-    const infoRes = await fetch(`https://api.github.com/gists/${CFG.gistId}?t=${Date.now()}`, {
-      headers: {
-        Authorization: `token ${CFG.token}`
-      }
+    const res = await fetch(`${TODOIST_BASE}/tasks`, {
+      method: 'POST',
+      headers: todoistHeaders(),
+      body: JSON.stringify({ content: text })
     });
-    const info = await infoRes.json();
-    const filename = Object.keys(info.files)[0];
-
-    await fetch(`https://api.github.com/gists/${CFG.gistId}`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `token ${CFG.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ files: { [filename]: { content } } })
-    });
+    if (!res.ok) throw new Error('add failed');
+    const task = await res.json();
     setSyncStatus('ok', 'saved ✓');
+    return task.id;
   } catch(e) {
     setSyncStatus('err', 'save err');
+    return null;
   }
 }
 
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(pushGist, 800);
+async function apiCloseTask(id) {
+  try {
+    await fetch(`${TODOIST_BASE}/tasks/${id}/close`, {
+      method: 'POST',
+      headers: todoistHeaders()
+    });
+  } catch(e) { setSyncStatus('err', 'sync err'); }
+}
+
+async function apiReopenTask(id) {
+  try {
+    await fetch(`${TODOIST_BASE}/tasks/${id}/reopen`, {
+      method: 'POST',
+      headers: todoistHeaders()
+    });
+  } catch(e) { setSyncStatus('err', 'sync err'); }
+}
+
+async function apiDeleteTask(id) {
+  try {
+    await fetch(`${TODOIST_BASE}/tasks/${id}`, {
+      method: 'DELETE',
+      headers: todoistHeaders()
+    });
+  } catch(e) { setSyncStatus('err', 'sync err'); }
 }
 
 // ─── GIF ─────────────────────────────────────────────────
@@ -705,27 +723,31 @@ function setRandomGif() {
 }
 
 // ─── TASKS ───────────────────────────────────────────────
-function addTask() {
+async function addTask() {
   const input = document.getElementById('todo-input');
   const text = input.value.trim();
   if (!text) return;
-  state.tasks.unshift({ id: Date.now().toString(), text, done: false });
   input.value = '';
-  render();
-  scheduleSave();
+  const id = await apiAddTask(text);
+  if (id) {
+    state.tasks.unshift({ id, text, done: false });
+    render();
+  }
 }
 
-function toggleTask(id) {
+async function toggleTask(id) {
   const t = state.tasks.find(t => t.id === id);
-  if (t) t.done = !t.done;
+  if (!t) return;
+  t.done = !t.done;
   render();
-  scheduleSave();
+  if (t.done) await apiCloseTask(id);
+  else await apiReopenTask(id);
 }
 
-function deleteTask(id) {
+async function deleteTask(id) {
   state.tasks = state.tasks.filter(t => t.id !== id);
   render();
-  scheduleSave();
+  await apiDeleteTask(id);
 }
 
 function renderTasks() {
@@ -783,13 +805,13 @@ function confirmAddLink() {
   state.links.push({ id: Date.now().toString(), name, url: fullUrl, size });
   closeLinkModal();
   render();
-  scheduleSave();
+  saveLinks();
 }
 
 function deleteLink(id) {
   state.links = state.links.filter(l => l.id !== id);
   render();
-  scheduleSave();
+  saveLinks();
 }
 
 function renderLinks() {
@@ -835,7 +857,9 @@ document.getElementById('link-modal').addEventListener('click', e => {
 // ─── INIT ─────────────────────────────────────────────────
 async function init() {
   setRandomGif();
-  await fetchGist();
+  loadLinks();
+  render();
+  await fetchTasks();
 }
 
 function loadFromURL() {
